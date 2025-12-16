@@ -1,0 +1,27 @@
+"civet autoLet react jsxCode"
+import { Canvas, useFrame } from "@react-three/fiber"
+import { useRef } from "react"
+
+function Cube()
+  const meshRef = useRef(null)
+
+  useFrame (state, delta) =>
+    meshRef.current.rotation.x += delta
+    meshRef.current.rotation.y += delta
+
+  <mesh ref=meshRef>
+    <boxGeometry args=[1, 1, 1]>
+    <meshStandardMaterial color="hotpink">
+
+
+export default function SpinningCube
+  <Canvas
+    camera=
+      position: [3, 3, 3]
+    style=
+      width: "100vw"
+      height: "100vh"
+    >
+      <ambientLight intensity=0.5>
+      <directionalLight position=[5, 5, 5]>
+      <Cube>
