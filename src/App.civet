@@ -1,10 +1,5 @@
 "civet autoLet react jsxCode"
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
-import SpinningCube from "./cube.civet"
+import Cube from "./Cube.civet"
 
-export default function App()
-  <SpinningCube>
-
+export default App = () =>
+  <Cube>
