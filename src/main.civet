@@ -1,9 +1,8 @@
-/// <reference lib="dom" />
 "civet autoLet react jsxCode"
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import './index.css'
-import App from './App.civet'
+import 'index.css'
+import { App } from 'App.civet'
 
 root = "root" |> document.getElementById |> createRoot
 root.render

@@ -1,5 +1,5 @@
 "civet autoLet react jsxCode"
-import Cube from "./Cube.civet"
+import { Cube } from "Cube.civet"
 
-export default App = () =>
+export App = () =>
   <Cube>
