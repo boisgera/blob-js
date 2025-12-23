@@ -1,5 +1,6 @@
 "civet autoLet react jsxCode"
-import { Cube } from "Cube.civet"
+// import { Cube } from "Cube.civet"
+import { Blob } from "Blob.civet"
 
 export App = () =>
-  <Cube>
+  <Blob>

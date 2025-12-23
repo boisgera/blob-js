@@ -1,0 +1,38 @@
+"civet autoLet react jsxCode"
+import * as THREE from 'three'
+import { Canvas, useFrame } from "@react-three/fiber"
+import { useMemo } from 'react'
+
+// TODO: generating function or points as an argument, automatically sample
+//       then add points at the start/end to get things nice-looking.
+
+export function Blob({segments = 64, color = '#000000'})
+  let points : THREE.Vector2[] = []
+  shape = useMemo =>
+    points = [ 
+      new THREE.Vector2(0, -1),
+      new THREE.Vector2(1, 0), 
+      new THREE.Vector2(0, 1), 
+      new THREE.Vector2(-1, 0), 
+      new THREE.Vector2(0, -1),
+      new THREE.Vector2(1, 0),
+      new THREE.Vector2(0, 1),
+    ]
+    points 
+      |> new THREE.SplineCurve 
+      |> .getPoints segments
+      |> new THREE.Shape 
+      ||> .closePath()
+  , 
+    [segments]
+
+  <Canvas
+    style=
+      width: "100vw"
+      height: "100vh"
+  >
+    <ambientLight intensity=0.5>
+    <directionalLight position=[5, 5, 5]>
+    <mesh>
+      <shapeGeometry args=[shape]>
+      <meshStandardMaterial color=color>
