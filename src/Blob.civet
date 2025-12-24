@@ -1,43 +1,94 @@
 "civet autoLet react jsxCode"
 import * as THREE from 'three'
-import { Canvas, useFrame } from "@react-three/fiber"
-import { useMemo, useRef } from 'react'
-
-// TODO: generating function or points as an argument, automatically sample
-//       then add points at the start/end to get things nice-looking.
+import { useFrame } from "@react-three/fiber"
+import { useRef, useState } from 'react'
 
 
-export function Blob({numPoints = 16, numSamples = 128, color = '#000000'})
+// Pure imaginary eigenvalues.
+function f1(xy : THREE.Vector2): THREE.Vector2
+  x = xy.x
+  y = xy.y
+  dx = -y + 0.1 * x
+  dy = x - 0.1 * y
+  new THREE.Vector2(dx, dy)
+
+function f2(xy : THREE.Vector2): THREE.Vector2
+  x = xy.x
+  y = xy.y
+  r = Math.sqrt(x * x + y * y)
+  dx = x + x * y - (x + y) * r;
+  dy = y - x * x + (x - y) * r;
+  new THREE.Vector2(dx, dy)
+
+function f3(xy : THREE.Vector2): THREE.Vector2
+  x = xy.x
+  y = xy.y
+  r2 = x * x + y * y;
+  denom = x * x + y * y * (1 + r2 * r2);
+  dx = (x * x * (y - x) + Math.pow(y, 5)) / denom;
+  dy = (y * y * (y - 2 * x)) / denom;
+  new THREE.Vector2(dx, dy)
+
+f = f2
+
+function step(xys : THREE.Vector2[], delta): THREE.Vector2[]
+  for xy of xys
+    xy.add(f(xy).multiplyScalar(delta)) // xy += f(xy) * delta  
+
+function linspace(start: number, end: number, num: number): number[]{
+  step = (end - start) / num
+  Array.from 
+    length: num
+    (_, i) => start + i * step
+}
+
+function initialBlob (numPoints: number): THREE.Vector2[]
+  thetas = linspace(0, Math.PI * 2, numPoints)
+  for theta of thetas
+    new THREE.Vector2
+      1.0 + 0.5 * Math.cos(theta)
+      0.0  + 0.5 * Math.sin(theta)
+
+function extend(points: THREE.Vector2[]): THREE.Vector2[]
+  // Close the path, then extend by one extra point on each end.
+  // (setup for a proper Catmull-Rom interpolation of a closed path)
+  [
+    points[points.length - 1],
+    ...points,
+    points[0],
+    points[1],
+  ]
+
+// Asymptotically: 
+//   - for f2 and f3: the stuff may become very thin in some places,
+//   - for f2:
+//     - the computation cost explodes (?),
+//     - the shape becomes unstable (?).
+//   - for f3:
+//     -  the shape seems to collapse instead of stabilizing.
+//   The graphics make me double that getSpacedPoints is performing correctly.
+//   I probably need to have a look at its implementation and/or make 
+//   more experiments
+export function Blob({ numPoints = 256 })
   meshRef = useRef(null)
+  [points, setPoints] = useState initialBlob(numPoints)
 
   useFrame (state, delta) =>
-    t = state.clock.getElapsedTime()
-    thetas = Array.from 
-      length: numPoints
-      (_, i) => (i / numPoints) * Math.PI * 2
-    points = (
-      for theta of thetas
-        new THREE.Vector2
-          Math.cos(theta) + 4 * Math.cos(3 * t) 
-          Math.sin(theta) + 2 * Math.sin(2 * t)
-    )
-  
-    points = [
-      points[points.length - 1],
-      ...points,
-      points[0],
-      points[1],
-    ]
-
-    shape = points      
-      |> new THREE.SplineCurve 
-      |> .getPoints numSamples 
+    // t = state.clock.getElapsedTime()
+    points = step(points, delta)
+    setPoints(points)
+    meshRef.current.geometry.dispose()
+    meshRef.current.geometry = points
+      // ||> console.log
+      |> extend     
+      |> new THREE.SplineCurve // Catmull-Rom spline
+      ||> &.arcLengthDivisions = 500 // Higher -> more accurate
+      |> .getSpacedPoints numPoints
       |> new THREE.Shape 
       ||> .closePath()
-    meshRef.current.geometry.dispose()
-    meshRef.current.geometry = new THREE.ShapeGeometry shape
+      |> new THREE.ShapeGeometry
 
   <mesh ref=meshRef>
     <shapeGeometry args=[new THREE.Shape()]>
-    <meshStandardMaterial color=color>
+    <meshStandardMaterial color="black">
 
