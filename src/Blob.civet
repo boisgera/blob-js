@@ -15,29 +15,27 @@ export function Blob({numPoints = 16, numSamples = 128, color = '#000000'})
     thetas = Array.from 
       length: numPoints
       (_, i) => (i / numPoints) * Math.PI * 2
-    points = 
+    points = (
       for theta of thetas
         new THREE.Vector2
           Math.cos(theta) + 4 * Math.cos(3 * t) 
           Math.sin(theta) + 2 * Math.sin(2 * t)
-      // ||> (points) => points.push points[0]
-      // ||> (points) => points.push points[1]
-      // ||> (points) => points.unshift points[points.length - 3]
+    )
   
-    points_extra = [
+    points = [
       points[points.length - 1],
       ...points,
       points[0],
       points[1],
     ]
 
-    shape = points_extra
+    shape = points      
       |> new THREE.SplineCurve 
       |> .getPoints numSamples 
       |> new THREE.Shape 
       ||> .closePath()
     meshRef.current.geometry.dispose()
-    meshRef.current.geometry = new THREE.ShapeGeometry(shape)
+    meshRef.current.geometry = new THREE.ShapeGeometry shape
 
   <mesh ref=meshRef>
     <shapeGeometry args=[new THREE.Shape()]>
