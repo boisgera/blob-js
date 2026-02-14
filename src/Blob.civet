@@ -36,7 +36,7 @@ function f3(xy : THREE.Vector2): THREE.Vector2
   dy = (y * y * (y - 2 * x)) / denom;
   new THREE.Vector2(dx, dy)
 
-f = f0
+f = f2
 
 function step(xys : THREE.Vector2[], delta): THREE.Vector2[]
   for xy of xys
@@ -52,10 +52,11 @@ function linspace(start: number, end: number, num: number) : number[]
 // The initial and final point should be identical.
 function initialBlob (numPoints: number): THREE.Vector2[]
   thetas = linspace(0, Math.PI * 2, numPoints)
+  r = 0.95
   for theta of thetas
     new THREE.Vector2
-      1.0 + 0.5 * Math.cos(theta)
-      0.0  + 0.5 * Math.sin(theta)
+      1.0 + r * Math.cos(theta)
+      0.0 + r * Math.sin(theta)
 
 function extend(points: THREE.Vector2[]): THREE.Vector2[]
   // Assume an already closed path, extend by one extra point on each end.
@@ -66,32 +67,35 @@ function extend(points: THREE.Vector2[]): THREE.Vector2[]
     points[1],
   ]
 
-// Asymptotically: 
-//   - for f2 and f3: the stuff may become very thin in some places,
-//   - for f2:
-//     - the computation cost explodes (?),
-//     - the shape becomes unstable (?).
-//   - for f3:
-//     -  the shape seems to collapse instead of stabilizing.
-//   The graphics make me double that getSpacedPoints is performing correctly.
-//   I probably need to have a look at its implementation and/or make 
-//   more experiments
-export function Blob({ numPoints = 4 })
+// This is much better.
+// We still have HUGE artifacts when the blob is very thin (numerically, self-
+// intersecting maybe), and small one when there are some very acute stuff 
+// but it doesn't explode like the previous version.
+//
+// Wrt thin stuff: *maybe* we could perform some dilation (how ?) before we
+// create the shape and see if that solves the issue?
+//
+// Wrt to thin edge, I don't know what to do. The same kind of thing,
+// detect and keep internally the same in the simulation state, but tweak
+// in a post-processing phase before creating the shape ? 
+// Here the detection ought to be simpler (curvature detection?) but
+// dilation may/should solve both issues in one go, if we can figure out how 
+// to do it.
+
+
+
+export function Blob({ numPoints = 128 })
   meshRef = useRef(null)
   [points, setPoints] = useState initialBlob(numPoints + 1)
-  console.log(points.length)
 
   useFrame (state, delta) =>
-    // t = state.clock.getElapsedTime()
     new_points = 
       step(points, delta)
-      ||> (p) => console.log(p.length)
-      |> extend     
+      |> extend
       |> new THREE.SplineCurve // Catmull-Rom spline
       // ||> &.arcLengthDivisions = 200 // Higher -> more accurate
-      |> .getSpacedPoints (numPoints + 1 + 2)
+      |> .getSpacedPoints (numPoints + 2)
       |> &[1...-1] // Remove the extra points we added for the spline
-      ||> (p) => console.log(p.length)
 
     setPoints(
         for point of new_points 
@@ -99,7 +103,7 @@ export function Blob({ numPoints = 4 })
     )
     
     meshRef.current.geometry.dispose()
-    meshRef.current.geometry = new_points
+    meshRef.current.geometry = new_points[...-1]
       |> new THREE.Shape 
       ||> .closePath()
       |> new THREE.ShapeGeometry
