@@ -4,12 +4,19 @@ import { useFrame } from "@react-three/fiber"
 import { useRef, useState } from 'react'
 
 
+function f0(xy : THREE.Vector2): THREE.Vector2
+  x = xy.x
+  y = xy.y
+  dx = 0.0
+  dy = 0.0
+  new THREE.Vector2(dx, dy)
+
 // Pure imaginary eigenvalues.
 function f1(xy : THREE.Vector2): THREE.Vector2
   x = xy.x
   y = xy.y
-  dx = -y + 0.1 * x
-  dy = x - 0.1 * y
+  dx = -y //+ 0.1 * x
+  dy = x //- 0.1 * y
   new THREE.Vector2(dx, dy)
 
 function f2(xy : THREE.Vector2): THREE.Vector2
@@ -29,19 +36,20 @@ function f3(xy : THREE.Vector2): THREE.Vector2
   dy = (y * y * (y - 2 * x)) / denom;
   new THREE.Vector2(dx, dy)
 
-f = f2
+f = f0
 
 function step(xys : THREE.Vector2[], delta): THREE.Vector2[]
   for xy of xys
-    xy.add(f(xy).multiplyScalar(delta)) // xy += f(xy) * delta  
+    newXY = xy.clone()
+    newXY.add(f(xy).multiplyScalar(delta))
+    newXY  
 
-function linspace(start: number, end: number, num: number): number[]{
-  step = (end - start) / num
-  Array.from 
-    length: num
-    (_, i) => start + i * step
-}
+function linspace(start: number, end: number, num: number) : number[]
+  step = (end - start) / (num - 1)
+  for i of [0...num]
+    start + i * step
 
+// The initial and final point should be identical.
 function initialBlob (numPoints: number): THREE.Vector2[]
   thetas = linspace(0, Math.PI * 2, numPoints)
   for theta of thetas
@@ -50,12 +58,11 @@ function initialBlob (numPoints: number): THREE.Vector2[]
       0.0  + 0.5 * Math.sin(theta)
 
 function extend(points: THREE.Vector2[]): THREE.Vector2[]
-  // Close the path, then extend by one extra point on each end.
+  // Assume an already closed path, extend by one extra point on each end.
   // (setup for a proper Catmull-Rom interpolation of a closed path)
   [
-    points[points.length - 1],
+    points[points.length - 2],
     ...points,
-    points[0],
     points[1],
   ]
 
@@ -69,21 +76,30 @@ function extend(points: THREE.Vector2[]): THREE.Vector2[]
 //   The graphics make me double that getSpacedPoints is performing correctly.
 //   I probably need to have a look at its implementation and/or make 
 //   more experiments
-export function Blob({ numPoints = 256 })
+export function Blob({ numPoints = 4 })
   meshRef = useRef(null)
-  [points, setPoints] = useState initialBlob(numPoints)
+  [points, setPoints] = useState initialBlob(numPoints + 1)
+  console.log(points.length)
 
   useFrame (state, delta) =>
     // t = state.clock.getElapsedTime()
-    points = step(points, delta)
-    setPoints(points)
-    meshRef.current.geometry.dispose()
-    meshRef.current.geometry = points
-      // ||> console.log
+    new_points = 
+      step(points, delta)
+      ||> (p) => console.log(p.length)
       |> extend     
       |> new THREE.SplineCurve // Catmull-Rom spline
-      ||> &.arcLengthDivisions = 500 // Higher -> more accurate
-      |> .getSpacedPoints numPoints
+      // ||> &.arcLengthDivisions = 200 // Higher -> more accurate
+      |> .getSpacedPoints (numPoints + 1 + 2)
+      |> &[1...-1] // Remove the extra points we added for the spline
+      ||> (p) => console.log(p.length)
+
+    setPoints(
+        for point of new_points 
+          point.clone()
+    )
+    
+    meshRef.current.geometry.dispose()
+    meshRef.current.geometry = new_points
       |> new THREE.Shape 
       ||> .closePath()
       |> new THREE.ShapeGeometry
