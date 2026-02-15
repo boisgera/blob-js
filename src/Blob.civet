@@ -52,7 +52,7 @@ function linspace(start: number, end: number, num: number) : number[]
 // The initial and final point should be identical.
 function initialBlob (numPoints: number): THREE.Vector2[]
   thetas = linspace(0, Math.PI * 2, numPoints)
-  r = 0.95
+  r = 0.9
   for theta of thetas
     new THREE.Vector2
       1.0 + r * Math.cos(theta)
@@ -82,10 +82,132 @@ function extend(points: THREE.Vector2[]): THREE.Vector2[]
 // dilation may/should solve both issues in one go, if we can figure out how 
 // to do it.
 
+// UPDATE: the dilation improves the thin edge issue a lot, but not the edges
+// (as expected) and we still have for some dynamics (f2) some weird artifacts
+// that are probably due to self-intersection. NOTA: the convention for
+// "inside" is probably based on the winding number, but here I guess that
+// the "any boundary crossed means inside" would be a more robust display.
+// Do we have that in three.js ?
+
+// TODO: factor out the normals computations from dilate
+
+// Remark: I suspect that dilate is made to work with non-repeating end points.
+// But takes repeating end points as input, so we need to remove the last point 
+// before dilating and add it back after. And document this of course.
+
+/**
+ * Dilate the shape by moving each point along its outer unit normal.
+ * 
+ * @param points - Array of Vector2 representing a closed path (first point == last point)
+ * @param distance - Distance to dilate outward
+ * @returns Dilated points with the same structure (first == last)
+ */
+export function dilate(points: THREE.Vector2[], distance = 0.1): THREE.Vector2[]
+  // Remove last point since it repeats the first
+  points = points[...-1]
+  dilatedPoints = []
+  for i of [0...points.length]
+    [prev, current, next] = 
+      [i - 1, i, i + 1]
+      |> .map (& + points.length) % points.length
+      |> .map points[&]
+    tangent = next.clone().sub(prev).normalize()
+    normal = new THREE.Vector2(-tangent.y, tangent.x)
+    // Move the current point of distance along the unit outer normal
+    dilatedPoint = current.clone().add(normal.multiplyScalar(distance))
+    dilatedPoints.push(dilatedPoint)
+
+  [...dilatedPoints, dilatedPoints[0].clone()] // Close the path again
 
 
-export function Blob({ numPoints = 128 })
+function orientation(a: THREE.Vector2, b: THREE.Vector2, c: THREE.Vector2): number
+  (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
+
+function segmentsIntersect(a1: THREE.Vector2, a2: THREE.Vector2, b1: THREE.Vector2, b2: THREE.Vector2): boolean
+  o1 = orientation(a1, a2, b1)
+  o2 = orientation(a1, a2, b2)
+  o3 = orientation(b1, b2, a1)
+  o4 = orientation(b1, b2, a2)
+
+  o1 * o2 < 0 and o3 * o4 < 0
+
+export function selfIntersect(points: THREE.Vector2[]): boolean
+  n = points.length
+  for i of [0...n]
+    for j of [i + 2...n]
+      if i == 0 and j == n - 1
+        continue
+      a1 = points[i]
+      a2 = points[(i + 1) % n]
+      b1 = points[j]
+      b2 = points[(j + 1) % n]
+      if segmentsIntersect(a1, a2, b1, b2)
+        return true
+  false
+
+
+function segmentIntersectionPoint(a1: THREE.Vector2, a2: THREE.Vector2, b1: THREE.Vector2, b2: THREE.Vector2): THREE.Vector2 | null
+  d = (a1.x - a2.x) * (b1.y - b2.y) - (a1.y - a2.y) * (b1.x - b2.x)
+  if Math.abs(d) < 1e-10
+    return null
+  
+  t = ((a1.x - b1.x) * (b1.y - b2.y) - (a1.y - b1.y) * (b1.x - b2.x)) / d
+  u = -((a1.x - a2.x) * (a1.y - b1.y) - (a1.y - a2.y) * (a1.x - b1.x)) / d
+  
+  if t >= 0 and t <= 1 and u >= 0 and u <= 1
+    new THREE.Vector2(
+      a1.x + t * (a2.x - a1.x),
+      a1.y + t * (a2.y - a1.y)
+    )
+  else
+    null
+
+
+function findIntersections(points: THREE.Vector2[]): { indices: number[], point: THREE.Vector2 }[]
+  n = points.length
+  intersections = []
+  for i of [0...n]
+    for j of [i + 2...n]
+      if i == 0 and j == n - 1
+        continue
+      a1 = points[i]
+      a2 = points[(i + 1) % n]
+      b1 = points[j]
+      b2 = points[(j + 1) % n]
+      intersection = segmentIntersectionPoint(a1, a2, b1, b2)
+      if intersection
+        indices = [i, (i + 1) % n, j, (j + 1) % n]
+        intersections.push({ indices, point: intersection })
+  intersections
+
+
+export function fixIntersections(points: THREE.Vector2[], maxIterations = 10): THREE.Vector2[]
+  result = points.map (p) -> p.clone()
+  
+  for iter of [0...maxIterations]
+    if not selfIntersect(result)
+      return result
+    
+    intersections = findIntersections(result)
+    if intersections.length == 0
+      return result
+    
+    epsilon = 0.001
+    
+    for { indices, point } of intersections
+      for idx of indices
+        vertex = result[idx]
+        direction = vertex.clone().sub(point).normalize()
+        if direction.length() < 1e-10
+          direction = new THREE.Vector2(1, 0)
+        result[idx] = vertex.add(direction.multiplyScalar(epsilon))
+  
+  result
+
+
+export function Blob({ numPoints = 32 })
   meshRef = useRef(null)
+  // num "real points", but points "closed the path", so we need an extra one.  
   [points, setPoints] = useState initialBlob(numPoints + 1)
 
   useFrame (state, delta) =>
@@ -93,17 +215,22 @@ export function Blob({ numPoints = 128 })
       step(points, delta)
       |> extend
       |> new THREE.SplineCurve // Catmull-Rom spline
-      // ||> &.arcLengthDivisions = 200 // Higher -> more accurate
+      ||> &.arcLengthDivisions = 500 // Higher -> more accurate
       |> .getSpacedPoints (numPoints + 2)
+      //|> fixIntersections // 🪲 so far, doesn't fix and giant fuck-up
+      // There is a specific issue with the first/last points AFAICT, 
+      // check that.
       |> &[1...-1] // Remove the extra points we added for the spline
 
-    setPoints(
-        for point of new_points 
-          point.clone()
-    )
+
+    console.log selfIntersect(new_points)
+      
+    setPoints new_points
     
     meshRef.current.geometry.dispose()
-    meshRef.current.geometry = new_points[...-1]
+    meshRef.current.geometry = new_points
+      |> dilate ., 0.02
+      |> &[...-1]
       |> new THREE.Shape 
       ||> .closePath()
       |> new THREE.ShapeGeometry
