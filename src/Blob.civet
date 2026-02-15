@@ -3,6 +3,23 @@ import * as THREE from 'three'
 import { useFrame } from "@react-three/fiber"
 import { useRef, useState } from 'react'
 
+// class AssertionError < Error
+//   constructor(message)
+//     super message
+//     this.name = "AssertionError"
+
+// assert_ := (condition: boolean): void => 
+//   if not condition
+//     throw new AssertionError("Assertion failed")
+
+
+
+// TODO: IVP "structure" (class) with f and initial set and maybe extra options.
+// Or just the arguments to a function?
+
+// TODO: delete self-intersection stuff, the fixed dilaton code solved it.
+
+// TODO: pendulum
 
 function f0(xy : THREE.Vector2): THREE.Vector2
   x = xy.x
@@ -15,8 +32,8 @@ function f0(xy : THREE.Vector2): THREE.Vector2
 function f1(xy : THREE.Vector2): THREE.Vector2
   x = xy.x
   y = xy.y
-  dx = -y //+ 0.1 * x
-  dy = x //- 0.1 * y
+  dx = -y + 0.5 * x
+  dy = x - 0.5 * y
   new THREE.Vector2(dx, dy)
 
 function f2(xy : THREE.Vector2): THREE.Vector2
@@ -91,14 +108,13 @@ function extend(points: THREE.Vector2[]): THREE.Vector2[]
 
 // TODO: factor out the normals computations from dilate
 
-// Remark: I suspect that dilate is made to work with non-repeating end points.
-// But takes repeating end points as input, so we need to remove the last point 
-// before dilating and add it back after. And document this of course.
-
 /**
  * Dilate the shape by moving each point along its outer unit normal.
  * 
- * @param points - Array of Vector2 representing a closed path (first point == last point)
+ * The shape boundary should be oriented counter-clockwise and should 
+ * be closed (first point == last point).
+ *
+ * @param points - Array of Vector2 representing the boundary path
  * @param distance - Distance to dilate outward
  * @returns Dilated points with the same structure (first == last)
  */
@@ -112,7 +128,7 @@ export function dilate(points: THREE.Vector2[], distance = 0.1): THREE.Vector2[]
       |> .map (& + points.length) % points.length
       |> .map points[&]
     tangent = next.clone().sub(prev).normalize()
-    normal = new THREE.Vector2(-tangent.y, tangent.x)
+    normal = new THREE.Vector2(tangent.y, -tangent.x)
     // Move the current point of distance along the unit outer normal
     dilatedPoint = current.clone().add(normal.multiplyScalar(distance))
     dilatedPoints.push(dilatedPoint)
@@ -205,7 +221,7 @@ export function fixIntersections(points: THREE.Vector2[], maxIterations = 10): T
   result
 
 
-export function Blob({ numPoints = 32 })
+export function Blob({ numPoints = 512 })
   meshRef = useRef(null)
   // num "real points", but points "closed the path", so we need an extra one.  
   [points, setPoints] = useState initialBlob(numPoints + 1)
@@ -216,20 +232,24 @@ export function Blob({ numPoints = 32 })
       |> extend
       |> new THREE.SplineCurve // Catmull-Rom spline
       ||> &.arcLengthDivisions = 500 // Higher -> more accurate
-      |> .getSpacedPoints (numPoints + 2)
+      |> .getSpacedPoints (numPoints + 2) // returns numPoints + 3 points.
+      ||> (ps) => console.assert (ps.length == numPoints + 3)
       //|> fixIntersections // 🪲 so far, doesn't fix and giant fuck-up
       // There is a specific issue with the first/last points AFAICT, 
       // check that.
       |> &[1...-1] // Remove the extra points we added for the spline
+      ||> (ps) => console.assert 
+        (ps.length == numPoints + 1), 
+        "invalid number of points: %d", ps.length
+  
 
-
-    console.log selfIntersect(new_points)
+    // console.log selfIntersect(new_points)
       
     setPoints new_points
     
     meshRef.current.geometry.dispose()
     meshRef.current.geometry = new_points
-      |> dilate ., 0.02
+      |> dilate ., 0.01
       |> &[...-1]
       |> new THREE.Shape 
       ||> .closePath()
